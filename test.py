@@ -3,7 +3,9 @@ __author__ = 'Nuclight.atomAltera'
 from orewrap.field import Field, StringField, HashField
 from redis import Redis
 
-Field.Init(Redis(decode_responses=True))
+r = Redis('server', decode_responses=True, db=99)
+
+Field.Init(r)
 
 
 h = HashField('tmp')

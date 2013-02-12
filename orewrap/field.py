@@ -21,24 +21,26 @@ class Field():
 		cls._Redis = redis
 
 
-	def __init__(self, key, valueSerializer=None, redis=None):
+	def __init__(self, key, value_serializer=None, redis=None):
 		"""
 		Initializing new instance of Field
 
 		key
 			Redis DB key name
 
-		valueSerializer
+		value_serializer
 			I/O 'value' serializer for current instance
 
 		redis
 			Redis client for this instance, if None, global client will be used (Defined in `Field.Init`)
 		"""
+		key = str(key)
+
 		if not len(key):
 			raise Exception('Field key has zero length')
 
 		self._key = key
-		self._valueSerializer = valueSerializer or serializer
+		self._value_serializer = value_serializer or serializer
 		self._redis = redis or self._Redis
 
 		if self._redis is None:
@@ -68,12 +70,12 @@ class StringField(Field):
 	Represents string fields in DB
 	http://redis.io/commands#string
 	"""
-	def __init__(self, key, valueSerializer=None, redis=None, overwrite=True):
+	def __init__(self, key, value_serializer=None, redis=None, overwrite=True):
 		"""
 		overwrite
 			whether overwrite values of existing key by default
 		"""
-		super(StringField, self).__init__(key, valueSerializer=valueSerializer, redis=redis)
+		super(StringField, self).__init__(key, value_serializer=value_serializer, redis=redis)
 
 		self._overwrite = overwrite
 
@@ -87,7 +89,7 @@ class StringField(Field):
 		overwrite = self._overwrite if overwrite is None else overwrite
 		method = self._redis.set if overwrite else self._redis.setnx
 
-		return method(self._key, self._valueSerializer.dump(value))
+		return method(self._key, self._value_serializer.dump(value))
 
 	def get(self, default=None):
 		"""
@@ -95,7 +97,7 @@ class StringField(Field):
 		"""
 		data = self._redis.get(self._key)
 
-		return self._valueSerializer.load(data) if data is not None else default
+		return self._value_serializer.load(data) if data is not None else default
 
 	def increment(self, amount=1):
 		"""
@@ -122,17 +124,17 @@ class HashField(Field):
 	Represents hash fields in DB
 	http://redis.io/commands#hash
 	"""
-	def __init__(self, key, valueSerializer=None, nameSerializer=None, redis=None, overwrite=True):
+	def __init__(self, key, value_serializer=None, name_serializer=None, redis=None, overwrite=True):
 		"""
-		nameSerializer
+		name_serializer
 			I/O 'name' serializer for current instance
 
 		overwrite
 			whether overwrite values of existing name in key by default
 		"""
-		super(HashField, self).__init__(key, valueSerializer=valueSerializer, redis=redis)
+		super(HashField, self).__init__(key, value_serializer=value_serializer, redis=redis)
 
-		self._nameSerializer = nameSerializer or serializer
+		self._name_serializer = name_serializer or serializer
 		self._overwrite = overwrite
 
 	def set(self, name, value, overwrite=None):
@@ -146,11 +148,11 @@ class HashField(Field):
 		method = self._redis.hset if overwrite else self._redis.hsetnx
 
 		return method(self._key,
-			self._nameSerializer.dump(name),
-			self._valueSerializer.dump(value)
+			self._name_serializer.dump(name),
+			self._value_serializer.dump(value)
 		)
 
-	def setMulti(self, dictionary, overwrite=None):
+	def set_multi(self, dictionary, overwrite=None):
 		"""
 		Writes multiple name-value pairs from dictionary to DB hash field.
 
@@ -164,8 +166,8 @@ class HashField(Field):
 
 		for name, value in dictionary.items():
 			method(self._key,
-				self._nameSerializer.dump(name),
-				self._valueSerializer.dump(value)
+				self._name_serializer.dump(name),
+				self._value_serializer.dump(value)
 			)
 
 		redis.execute()
@@ -176,17 +178,17 @@ class HashField(Field):
 		If field or name does not exists, 'default' will be returned
 		"""
 		value = self._redis.hget(
-			self._key, self._nameSerializer.load(name)
+			self._key, self._name_serializer.load(name)
 		)
 
-		return self._valueSerializer.load(value) if value is not None else default
+		return self._value_serializer.load(value) if value is not None else default
 
 	def members(self):
 		"""
 		Returns all name-value pairs, stored in field
 		"""
 		return {
-			self._nameSerializer.load(name): self._valueSerializer.load(value)
+			self._name_serializer.load(name): self._value_serializer.load(value)
 			for name, value in self._redis.hgetall(self._key).items()
 		}
 
@@ -194,25 +196,25 @@ class HashField(Field):
 		"""
 		Checks whether hash field contains 'name'
 		"""
-		return self._redis.hexists(self._key, self._nameSerializer.dump(name))
+		return self._redis.hexists(self._key, self._name_serializer.dump(name))
 
 	def names(self):
 		"""
 		Return set of names in hash field
 		"""
-		return {self._nameSerializer.load(name) for name in self._redis.hkeys(self._key)}
+		return {self._name_serializer.load(name) for name in self._redis.hkeys(self._key)}
 
 	def values(self):
 		"""
 		Return list of value in hash field
 		"""
-		return [self._valueSerializer.load(value) for value in self._redis.hvals(self._key)]
+		return [self._value_serializer.load(value) for value in self._redis.hvals(self._key)]
 
 	def delete(self, name):
 		"""
 		Deletes name-value pair form hash field by 'name'
 		"""
-		return self._redis.hdel(self._key, self._nameSerializer.dump(name))
+		return self._redis.hdel(self._key, self._name_serializer.dump(name))
 
 	def count(self):
 		"""
