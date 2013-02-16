@@ -1,8 +1,6 @@
 __author__ = 'Nuclight.atomAltera'
 
-from redis import Redis
-
-from .serializer import serializer, ignoreCaseSerializer, dateTimeSerializer
+from .serializers import serializer, ignoreCaseSerializer, dateTimeSerializer
 
 class Field():
 	"""
@@ -13,13 +11,12 @@ class Field():
 	_Redis = None
 
 	@classmethod
-	def Init(cls, redis):
+	def Set_Redis(cls, redis):
 		"""
-		Initializing global redis client.
+		Set global redis client
 		Note that for each Field class different redis clients can be used!
 		"""
 		cls._Redis = redis
-
 
 	def __init__(self, key, value_serializer=None, redis=None):
 		"""
@@ -63,6 +60,9 @@ class Field():
 
 	def __ne__(self, other):
 		return not self.__eq__(other)
+
+
+
 
 
 class StringField(Field):
@@ -119,6 +119,8 @@ class StringField(Field):
 		return hash(self._key)
 
 
+
+
 class HashField(Field):
 	"""
 	Represents hash fields in DB
@@ -159,18 +161,12 @@ class HashField(Field):
 		overwrite
 			whether overwrite value in existing names in key, if None, uses default value, defined while instantiating
 		"""
-		redis = self._redis.pipline()
-
 		overwrite = self._overwrite if overwrite is None else overwrite
-		method = redis.hset if overwrite else redis.hsetnx
+		method = self._redis.hmset if overwrite else self._redis.hmsetnx
 
-		for name, value in dictionary.items():
-			method(self._key,
-				self._name_serializer.dump(name),
-				self._value_serializer.dump(value)
-			)
-
-		redis.execute()
+		return method(self._key,
+			{self._name_serializer.dump(name): self._value_serializer.dump(value) for name, value in dictionary.items()}
+		)
 
 	def get(self, name, default=None):
 		"""
@@ -185,11 +181,11 @@ class HashField(Field):
 
 	def members(self):
 		"""
-		Returns all name-value pairs, stored in field
+		Returns all name-value pairs, stored in hash field
 		"""
 		return {
-			self._name_serializer.load(name): self._value_serializer.load(value)
-			for name, value in self._redis.hgetall(self._key).items()
+		self._name_serializer.load(name): self._value_serializer.load(value)
+		for name, value in self._redis.hgetall(self._key).items()
 		}
 
 	def contains(self, name):
@@ -247,3 +243,78 @@ class HashField(Field):
 
 	def items(self):
 		return self.members().items()
+
+
+
+
+
+class SetField(Field):
+	"""
+	Represents set fields in DB
+	http://redis.io/commands#set
+	"""
+	def add(self, *values):
+		"""
+		Adds 'values' to set field
+		"""
+		return self._redis.sadd(self._key, *map(self._value_serializer.dump, values))
+
+	def delete(self, *values):
+		"""
+		Removes 'values' from set field
+		"""
+		return self._redis.srem(self._key, *map(self._value_serializer.dump, values))
+
+	def members(self):
+		"""
+		Gets all members from set field
+		"""
+		return map(self._value_serializer.load, self._redis.smembers(self._key))
+
+	def count(self):
+		"""
+		Gets count of members in set field
+		"""
+		return self._redis.scard(self._key)
+
+	def contains(self, value):
+		"""
+		Checks whether set field contains 'value'
+		"""
+		return self._redis.sismember(self._key, self._value_serializer.dump(value))
+
+	def random(self, number=None, unique=True):
+		"""
+		Return random value(s) form set field
+
+		number
+			how many values must be returned (1 by default). Must be positive!
+
+		unique
+			if True, result list will contains unique values and limited by 'number'
+		"""
+		if number:
+			if number < 0:
+				raise Exception('Number must be positive')
+
+			if not unique:
+				number *= -1
+
+			return map(self._value_serializer.load, self._redis.srandmember(self._key, number))
+		else:
+			return self._value_serializer.load(self._redis.srandmember(self._key))
+
+	def pop(self):
+		"""
+		Returns random value and removes it from set field
+		"""
+		return self._value_serializer.load(self._redis.spop(self._key))
+
+	def __len__(self):
+		return self.count()
+
+	def __iter__(self):
+		return self.members().__iter__()
+
+	def __contains__(self, value):
+		return self.contains(value)

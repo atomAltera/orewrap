@@ -9,9 +9,16 @@ class Serializer():
 	def load(self, data):
 		return data
 
+class StringSerializer():
+	def dump(self, value):
+		return str(value).encode(encoding='utf-8', errors='strict')
+
+	def load(self, data):
+		return data.decode(encoding='utf-8', errors='strict')
+
 class IgnoreCaseSerializer(Serializer):
 	def dump(self, value):
-		return super(IgnoreCaseSerializer, self).dump(str(value)).lower()
+		return super(IgnoreCaseSerializer, self).dump(str(value).lower())
 
 
 class DateTimeSerializer(Serializer):
