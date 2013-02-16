@@ -1,6 +1,7 @@
 __author__ = 'Nuclight.atomAltera'
 
-from .serializers import serializer, ignoreCaseSerializer, dateTimeSerializer
+from .serializers import serializer
+from .conversters import ConvertQueue
 
 class Field():
 	"""
@@ -9,14 +10,23 @@ class Field():
 
 	# Global redis client instance
 	_Redis = None
+	_Value_Serializer = None
 
 	@classmethod
-	def Set_Redis(cls, redis):
+	def Init(cls, redis, value_serializer = None):
 		"""
-		Set global redis client
-		Note that for each Field class different redis clients can be used!
+		Initialize global Field settings
+		Note that for each Field class different settings can be used!
+
+		redis
+			redis client, will be used for all field by default
+
+		value_serializer
+			value serializer, will be used for all field by default
+
 		"""
 		cls._Redis = redis
+		cls._Value_Serializer = value_serializer
 
 	def __init__(self, key, value_serializer=None, redis=None):
 		"""
@@ -37,7 +47,7 @@ class Field():
 			raise Exception('Field key has zero length')
 
 		self._key = key
-		self._value_serializer = value_serializer or serializer
+		self._value_serializer = value_serializer or self._Value_Serializer or serializer
 		self._redis = redis or self._Redis
 
 		if self._redis is None:
@@ -126,6 +136,16 @@ class HashField(Field):
 	Represents hash fields in DB
 	http://redis.io/commands#hash
 	"""
+	@classmethod
+	def Init(cls, redis, value_serializer = None, name_serializer = None):
+		"""
+		As like `Field.Init`, but also initializes default 'name_serializer' for all instances of HashField
+		"""
+		super(HashField, cls).Init(redis=redis, value_serializer=value_serializer)
+
+		cls._Name_Serializer = name_serializer
+
+
 	def __init__(self, key, value_serializer=None, name_serializer=None, redis=None, overwrite=True):
 		"""
 		name_serializer
@@ -136,7 +156,8 @@ class HashField(Field):
 		"""
 		super(HashField, self).__init__(key, value_serializer=value_serializer, redis=redis)
 
-		self._name_serializer = name_serializer or serializer
+		self._name_serializer = name_serializer or self._Value_Serializer or serializer
+
 		self._overwrite = overwrite
 
 	def set(self, name, value, overwrite=None):

@@ -14,7 +14,7 @@ KEY = 'test'
 class FieldTestCaseBase(unittest.TestCase):
 	@classmethod
 	def setUpClass(cls):
-		cls.redis = Redis(host=HOST, port=PORT, db=DB, decode_responses=True)
+		cls.redis = Redis(host=HOST, port=PORT, db=DB, decode_responses=False)
 		cls.key = KEY
 
 		cls._random = Random()

@@ -1,6 +1,7 @@
 __author__ = 'Nuclight.atomAltera'
 
 from datetime import datetime
+from base64 import b64encode, b64decode
 
 class Serializer():
 	def dump(self, value):
@@ -9,16 +10,16 @@ class Serializer():
 	def load(self, data):
 		return data
 
-class StringSerializer():
+class StringSerializer(Serializer):
 	def dump(self, value):
 		return str(value).encode(encoding='utf-8', errors='strict')
 
 	def load(self, data):
 		return data.decode(encoding='utf-8', errors='strict')
 
-class IgnoreCaseSerializer(Serializer):
+class LowerCaseSerializer(Serializer):
 	def dump(self, value):
-		return super(IgnoreCaseSerializer, self).dump(str(value).lower())
+		return super(LowerCaseSerializer, self).dump(str(value).lower())
 
 
 class DateTimeSerializer(Serializer):
@@ -36,7 +37,16 @@ class DateTimeSerializer(Serializer):
 
 		return datetime.fromtimestamp(timestamp)
 
+class Base64Serializer(Serializer):
+	def dump(self, value):
+		return b64encode(value.encode())
+
+	def load(self, data):
+		return b64decode(data).decode()
+
 
 serializer = Serializer()
-ignoreCaseSerializer = IgnoreCaseSerializer()
+stringSerializer = StringSerializer()
+lowerCaseSerializer = LowerCaseSerializer()
 dateTimeSerializer = DateTimeSerializer()
+base64Serializer = Base64Serializer()
