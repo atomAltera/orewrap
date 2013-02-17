@@ -4,17 +4,21 @@ from datetime import datetime
 
 from orewrap.conversters import *
 
-now = datetime.now()
+text = 'Hello world'
 
-print(now)
+conv = ConvertQueue(stringEncoder, base64Encoder)
 
-print('-' * 20)
+c = conv.encode(text)
 
-converter = ConvertQueue(dateTimeConverter, stringConverter, base64Converter)
 
-code = converter.encode(now)
+from redis import Redis
 
-print('Code: ', code)
-value = converter.decode(code)
+r = Redis()
 
-print('Value', value, 'Type:', type(value))
+r.set('a', c)
+c = r.get('a')
+
+t = conv.decode(c)
+
+print(c, t, sep='\n')
+

@@ -1,6 +1,6 @@
 __author__ = 'Nuclight.atomAltera'
 
-from .conversters import ConvertQueue, stringConverter
+from .encoders import string_encoder
 
 class Field():
 	"""
@@ -9,10 +9,10 @@ class Field():
 
 	# Global redis client instance
 	_Redis = None
-	_Value_Converter = None
+	_Value_Encoder = None
 
 	@classmethod
-	def Init(cls, redis, value_converter = None):
+	def Init(cls, redis, value_encoder = None):
 		"""
 		Initialize global Field settings
 		Note that for each Field class different settings can be used!
@@ -20,21 +20,21 @@ class Field():
 		redis
 			redis client, will be used for all field by default
 
-		value_converter
+		value_encoder
 			value serializer, will be used for all field by default
 
 		"""
 		cls._Redis = redis
-		cls._Value_Converter = value_converter
+		cls._Value_Encoder = value_encoder
 
-	def __init__(self, key, value_converter=None, redis=None):
+	def __init__(self, key, value_encoder=None, redis=None):
 		"""
 		Initializing new instance of Field
 
 		key
 			Redis DB key name
 
-		value_converter
+		value_encoder
 			I/O 'value' serializer for current instance
 
 		redis
@@ -46,7 +46,7 @@ class Field():
 			raise Exception('Field key has zero length')
 
 		self._key = key
-		self._value_converter = value_converter or self._Value_Converter or stringConverter
+		self._value_encoder = value_encoder or self._Value_Encoder or string_encoder
 		self._redis = redis or self._Redis
 
 		if self._redis is None:
@@ -79,12 +79,12 @@ class StringField(Field):
 	Represents string fields in DB
 	http://redis.io/commands#string
 	"""
-	def __init__(self, key, value_converter=None, redis=None, overwrite=True):
+	def __init__(self, key, value_encoder=None, redis=None, overwrite=True):
 		"""
 		overwrite
 			whether overwrite values of existing key by default
 		"""
-		super(StringField, self).__init__(key, value_converter=value_converter, redis=redis)
+		super(StringField, self).__init__(key, value_encoder=value_encoder, redis=redis)
 
 		self._overwrite = overwrite
 
@@ -98,7 +98,7 @@ class StringField(Field):
 		overwrite = self._overwrite if overwrite is None else overwrite
 		method = self._redis.set if overwrite else self._redis.setnx
 
-		return method(self._key, self._value_converter.encode(value))
+		return method(self._key, self._value_encoder.encode(value))
 
 	def get(self, default=None):
 		"""
@@ -106,7 +106,7 @@ class StringField(Field):
 		"""
 		data = self._redis.get(self._key)
 
-		return self._value_converter.decode(data) if data is not None else default
+		return self._value_encoder.decode(data) if data is not None else default
 
 	def increment(self, amount=1):
 		"""
@@ -136,26 +136,26 @@ class HashField(Field):
 	http://redis.io/commands#hash
 	"""
 	@classmethod
-	def Init(cls, redis, value_converter = None, name_converter = None):
+	def Init(cls, redis, value_encoder = None, name_encoder = None):
 		"""
-		As like `Field.Init`, but also initializes default 'name_converter' for all instances of HashField
+		As like `Field.Init`, but also initializes default 'name_encoder' for all instances of HashField
 		"""
-		super(HashField, cls).Init(redis=redis, value_converter=value_converter)
+		super(HashField, cls).Init(redis=redis, value_encoder=value_encoder)
 
-		cls._Name_Converter = name_converter
+		cls._Name_Encoder = name_encoder
 
 
-	def __init__(self, key, value_converter=None, name_converter=None, redis=None, overwrite=True):
+	def __init__(self, key, value_encoder=None, name_encoder=None, redis=None, overwrite=True):
 		"""
-		name_converter
+		name_encoder
 			I/O 'name' serializer for current instance
 
 		overwrite
 			whether overwrite values of existing name in key by default
 		"""
-		super(HashField, self).__init__(key, value_converter=value_converter, redis=redis)
+		super(HashField, self).__init__(key, value_encoder=value_encoder, redis=redis)
 
-		self._name_converter = name_converter or self._Name_Converter or stringConverter
+		self._name_encoder = name_encoder or self._Name_Encoder or string_encoder
 
 		self._overwrite = overwrite
 
@@ -170,8 +170,8 @@ class HashField(Field):
 		method = self._redis.hset if overwrite else self._redis.hsetnx
 
 		return method(self._key,
-			self._name_converter.encode(name),
-			self._value_converter.encode(value)
+			self._name_encoder.encode(name),
+			self._value_encoder.encode(value)
 		)
 
 	def set_multi(self, dictionary, overwrite=None):
@@ -185,7 +185,7 @@ class HashField(Field):
 		method = self._redis.hmset if overwrite else self._redis.hmsetnx
 
 		return method(self._key,
-			{self._name_converter.encode(name): self._value_converter.encode(value) for name, value in dictionary.items()}
+			{self._name_encoder.encode(name): self._value_encoder.encode(value) for name, value in dictionary.items()}
 		)
 
 	def get(self, name, default=None):
@@ -194,17 +194,17 @@ class HashField(Field):
 		If field or name does not exists, 'default' will be returned
 		"""
 		value = self._redis.hget(
-			self._key, self._name_converter.decode(name)
+			self._key, self._name_encoder.encode(name)
 		)
 
-		return self._value_converter.decode(value) if value is not None else default
+		return self._value_encoder.decode(value) if value is not None else default
 
 	def members(self):
 		"""
 		Returns all name-value pairs, stored in hash field
 		"""
 		return {
-		self._name_converter.decode(name): self._value_converter.decode(value)
+		self._name_encoder.decode(name): self._value_encoder.decode(value)
 		for name, value in self._redis.hgetall(self._key).items()
 		}
 
@@ -212,25 +212,25 @@ class HashField(Field):
 		"""
 		Checks whether hash field contains 'name'
 		"""
-		return self._redis.hexists(self._key, self._name_converter.encode(name))
+		return self._redis.hexists(self._key, self._name_encoder.encode(name))
 
 	def names(self):
 		"""
 		Return set of names in hash field
 		"""
-		return {self._name_converter.decode(name) for name in self._redis.hkeys(self._key)}
+		return {self._name_encoder.decode(name) for name in self._redis.hkeys(self._key)}
 
 	def values(self):
 		"""
 		Return list of value in hash field
 		"""
-		return [self._value_converter.decode(value) for value in self._redis.hvals(self._key)]
+		return [self._value_encoder.decode(value) for value in self._redis.hvals(self._key)]
 
 	def delete(self, name):
 		"""
 		Deletes name-value pair form hash field by 'name'
 		"""
-		return self._redis.hdel(self._key, self._name_converter.encode(name))
+		return self._redis.hdel(self._key, self._name_encoder.encode(name))
 
 	def count(self):
 		"""
@@ -277,19 +277,19 @@ class SetField(Field):
 		"""
 		Adds 'values' to set field
 		"""
-		return self._redis.sadd(self._key, *map(self._value_converter.encode, values))
+		return self._redis.sadd(self._key, *map(self._value_encoder.encode, values))
 
 	def delete(self, *values):
 		"""
 		Removes 'values' from set field
 		"""
-		return self._redis.srem(self._key, *map(self._value_converter.encode, values))
+		return self._redis.srem(self._key, *map(self._value_encoder.encode, values))
 
 	def members(self):
 		"""
 		Gets all members from set field
 		"""
-		return map(self._value_converter.decode, self._redis.smembers(self._key))
+		return map(self._value_encoder.decode, self._redis.smembers(self._key))
 
 	def count(self):
 		"""
@@ -301,7 +301,7 @@ class SetField(Field):
 		"""
 		Checks whether set field contains 'value'
 		"""
-		return self._redis.sismember(self._key, self._value_converter.encode(value))
+		return self._redis.sismember(self._key, self._value_encoder.encode(value))
 
 	def random(self, number=None, unique=True):
 		"""
@@ -320,15 +320,15 @@ class SetField(Field):
 			if not unique:
 				number *= -1
 
-			return map(self._value_converter.decode, self._redis.srandmember(self._key, number))
+			return map(self._value_encoder.decode, self._redis.srandmember(self._key, number))
 		else:
-			return self._value_converter.decode(self._redis.srandmember(self._key))
+			return self._value_encoder.decode(self._redis.srandmember(self._key))
 
 	def pop(self):
 		"""
 		Returns random value and removes it from set field
 		"""
-		return self._value_converter.decode(self._redis.spop(self._key))
+		return self._value_encoder.decode(self._redis.spop(self._key))
 
 	def __len__(self):
 		return self.count()
