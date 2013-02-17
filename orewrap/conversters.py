@@ -1,15 +1,17 @@
 __author__ = 'Nuclight.atomAltera'
 
+from functools import reduce
+
 class Converter():
-	def __init__(self, encoder, decoder):
-		self._encoder = encoder
-		self._decoder = decoder
+	def __init__(self, encoder=None, decoder=None):
+		if encoder is not None: self.encode = encoder
+		if decoder is not None: self.decode = decoder
 
 	def encode(self, value):
-		return self._encoder(value)
+		return value
 
 	def decode(self, code):
-		return self._decoder(code)
+		return code
 
 
 class ConvertQueue():
@@ -20,24 +22,32 @@ class ConvertQueue():
 		self._decoders = list(filter(filterFunc, (converter.decode for converter in reversed(converters))))
 
 	def encode(self, value):
-		code = value
-
-		for encoder in self._encoders:
-			code = encoder(code)
-
-		return code
+		return reduce(lambda value, encoder: encoder(value), self._encoders, value)
 
 	def decode(self, code):
-		value = code
-
-		for decoder in self._decoders:
-			value = decoder(value)
-
-		return value
+		return reduce(lambda code, decoder: decoder(code), self._decoders, code)
 
 
-stringConverter = Converter(str.encode, bytes.decode)
+stringConverter = Converter(
+	lambda value: str(value).encode(encoding='utf-8'),
+	lambda code: code.decode(encoding='utf-8')
+)
+
+
 lowerCaseConverter = Converter(
 	lambda value: str(value).lower(),
 	None
 )
+
+from datetime import datetime
+
+dateTimeConverter = Converter(
+	lambda value: value.timestamp(),
+	lambda code: datetime.fromtimestamp(float(code))
+)
+
+import base64
+
+base64Converter = Converter(base64.b64encode, base64.b64decode)
+base32Converter = Converter(base64.b32encode, base64.b32decode)
+base16Converter = Converter(base64.b16encode, base64.b16decode)
