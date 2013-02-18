@@ -5,25 +5,24 @@ from random import Random
 
 from redis import Redis
 
-from orewrap.encoders import EncodeQueue, string_encoder, base64Encoder, base32Encoder, base16Encoder
+from orewrap.encoders import EncodeQueue, string_encoder, base64_encoder, base32_encoder, base16_encoder
 
 HOST = 'localhost'
 PORT = 6379
 DB = 0
 
-KEY = 'test'
-
 class FieldTestCaseBase(unittest.TestCase):
 	@classmethod
 	def setUpClass(cls):
 		cls.redis = Redis(host=HOST, port=PORT, db=DB, decode_responses=False)
-		cls.key = KEY
+
 
 		cls._random = Random()
-		cls.v_con = EncodeQueue(string_encoder, base64Encoder)
-		cls.n_con = EncodeQueue(string_encoder, base32Encoder)
-		cls.s_con = EncodeQueue(string_encoder, base16Encoder)
+		cls.v_con = EncodeQueue(string_encoder, base64_encoder)
+		cls.n_con = EncodeQueue(string_encoder, base32_encoder)
+		cls.s_con = EncodeQueue(string_encoder, base16_encoder)
 
+		cls.keys = cls.r(10)
 		cls.values = cls.r(10)
 		cls.names = cls.r(10)
 		cls.scores = cls.r(10, True)

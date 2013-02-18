@@ -48,6 +48,6 @@ datetime_encoder = Encoder(
 
 import base64
 
-base64Encoder = Encoder(base64.b64encode, base64.b64decode)
-base32Encoder = Encoder(base64.b32encode, base64.b32decode)
-base16Encoder = Encoder(base64.b16encode, base64.b16decode)
+base64_encoder = Encoder(base64.b64encode, base64.b64decode)
+base32_encoder = Encoder(base64.b32encode, base64.b32decode)
+base16_encoder = Encoder(base64.b16encode, base64.b16decode)

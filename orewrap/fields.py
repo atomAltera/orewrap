@@ -55,14 +55,20 @@ class Field():
 	def exists(self):
 		"""
 		Checking field exists in DB
+
+		return value
+			True, if field exists, else False
 		"""
 		return self._redis.exists(self._key)
 
 	def destroy(self):
 		"""
 		Removing field from DB
+
+		return value
+			True, if field existed, else False
 		"""
-		return self._redis.delete(self._key)
+		return bool(self._redis.delete(self._key))
 
 	def __eq__(self, other):
 		return (type(self) == type(other)) and (self._key == other._key)
@@ -94,11 +100,14 @@ class StringField(Field):
 
 		overwrite
 			whether overwrite value of existing key, if None, uses default value, defined while instantiating
+
+		return value
+			True if new value has been set, else False
 		"""
 		overwrite = self._overwrite if overwrite is None else overwrite
 		method = self._redis.set if overwrite else self._redis.setnx
 
-		return method(self._key, self._value_encoder.encode(value))
+		return bool(method(self._key, self._value_encoder.encode(value)))
 
 	def get(self, default=None):
 		"""
@@ -110,8 +119,8 @@ class StringField(Field):
 
 	def increment(self, amount=1):
 		"""
-		Increments numeric value in DB by 'amount'. If field does not exists, "1" will be write in it and return.
-		If field contains non numeric value, redis.exceptions.ResponseError will occurred
+		Increments numeric value in DB by 'amount'. If field does not exists, "1" will be writen in it and returned.
+		If field contains non numeric value, `redis.exceptions.ResponseError` will occur
 		"""
 		return self._redis.incr(self._key, amount)
 
@@ -165,28 +174,45 @@ class HashField(Field):
 
 		overwrite
 			whether overwrite value in existing name in key, if None, uses default value, defined while instantiating
+
+		return value
+			True if new value has been set, else False
 		"""
 		overwrite = self._overwrite if overwrite is None else overwrite
 		method = self._redis.hset if overwrite else self._redis.hsetnx
 
-		return method(self._key,
+		return bool(method(self._key,
 			self._name_encoder.encode(name),
 			self._value_encoder.encode(value)
-		)
+		)) or overwrite # because hset returns 0 if name-value pair with same name already exists ( http://redis.io/commands/hset )
 
-	def set_multi(self, dictionary, overwrite=None):
+	def set_multi(self, dictionary):
 		"""
-		Writes multiple name-value pairs from dictionary to DB hash field.
+		Writes multiple name-value pairs from 'dictionary' to DB hash field.
 
-		overwrite
-			whether overwrite value in existing names in key, if None, uses default value, defined while instantiating
+		return value
+			always True
 		"""
-		overwrite = self._overwrite if overwrite is None else overwrite
-		method = self._redis.hmset if overwrite else self._redis.hmsetnx
-
-		return method(self._key,
+		return self._redis.hmset(self._key,
 			{self._name_encoder.encode(name): self._value_encoder.encode(value) for name, value in dictionary.items()}
 		)
+
+	def get_multi(self, names, default=None):
+		"""
+		Returns list of values, associated with 'names'
+
+		default
+			values for not existed names will be replaces by 'default'
+
+		return value
+			list of values, associated with 'names' in the same order as requested in names
+		"""
+		values = self._redis.hmget(self._key,
+			(self._name_encoder.encode(name) for name in names)
+		)
+
+		return tuple(self._value_encoder.decode(value) if value is not None else default for value in values)
+
 
 	def get(self, name, default=None):
 		"""

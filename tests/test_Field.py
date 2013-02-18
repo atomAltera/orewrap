@@ -8,21 +8,28 @@ class FieldTestCase(FieldTestCaseBase):
 	def setUp(self):
 		super(FieldTestCase, self).setUp()
 
-		self.field = Field(self.key, redis=self.redis)
+		self.field = Field(self.keys[0], redis=self.redis)
 
 	def test_exists(self):
-		self.assertFalse(self.field.exists())
+		result = self.field.exists()
+		self.assertFalse(result)
 
-		self.redis.set(self.key, 'foobar')
+		self.redis.set(self.keys[0], 'foobar')
 
-		self.assertTrue(self.field.exists())
+		result = self.field.exists()
+		self.assertTrue(result)
 
 	def test_destroy(self):
-		self.redis.set(self.key, 'foobar')
-		self.field.destroy()
+		result = self.field.destroy()
+		self.assertFalse(result)
 
-		self.assertFalse(self.redis.exists(self.key))
+		self.redis.set(self.keys[0], 'foobar')
+
+		result = self.field.destroy()
+		self.assertTrue(result)
+
+		self.assertFalse(self.redis.exists(self.keys[0]))
 
 	def test_equals(self):
-		self.assertTrue(self.field == Field(self.key, redis=self.redis))
-		self.assertFalse(self.field != Field(self.key, redis=self.redis))
+		self.assertTrue(self.field == Field(self.keys[0], redis=self.redis))
+		self.assertFalse(self.field != Field(self.keys[0], redis=self.redis))

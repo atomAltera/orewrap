@@ -2,11 +2,11 @@ __author__ = 'Nuclight.atomAltera'
 
 from datetime import datetime
 
-from orewrap.conversters import *
+from orewrap.encoders import *
 
 text = 'Hello world'
 
-conv = ConvertQueue(stringEncoder, base64Encoder)
+conv = EncodeQueue(string_encoder, base64_encoder)
 
 c = conv.encode(text)
 
