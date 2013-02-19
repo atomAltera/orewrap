@@ -244,19 +244,22 @@ class HashField(Field):
 		"""
 		Return set of names in hash field
 		"""
-		return {self._name_encoder.decode(name) for name in self._redis.hkeys(self._key)}
+		return map(self._name_encoder.decode, self._redis.hkeys(self._key))
 
 	def values(self):
 		"""
 		Return list of value in hash field
 		"""
-		return [self._value_encoder.decode(value) for value in self._redis.hvals(self._key)]
+		return map(self._value_encoder.decode, self._redis.hvals(self._key))
 
 	def delete(self, name):
 		"""
 		Deletes name-value pair form hash field by 'name'
+
+		return value
+			True, if deleted, False if name-value pair with the same name not existed
 		"""
-		return self._redis.hdel(self._key, self._name_encoder.encode(name))
+		return bool(self._redis.hdel(self._key, self._name_encoder.encode(name)))
 
 	def count(self):
 		"""
@@ -285,7 +288,8 @@ class HashField(Field):
 
 	# Aliases and methods for capability with `dict`
 
-	keys = names
+	def keys(self):
+		return self.names()
 
 	def items(self):
 		return self.members().items()
@@ -302,6 +306,9 @@ class SetField(Field):
 	def add(self, *values):
 		"""
 		Adds 'values' to set field
+
+		return value
+			the number of elements that were added to the set, not including all the elements already present into the set.
 		"""
 		return self._redis.sadd(self._key, *map(self._value_encoder.encode, values))
 

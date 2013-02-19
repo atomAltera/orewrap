@@ -48,5 +48,7 @@ class FieldTestCaseBase(unittest.TestCase):
 
 		if not integer:
 			result = tuple('{0:X}'.format(value) for value in result)
+		else:
+			result = tuple(result)
 
 		return result if num > 1 else result[0]
