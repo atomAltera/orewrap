@@ -14,6 +14,7 @@ c = conv.encode(text)
 from redis import Redis
 
 r = Redis()
+r.pipeline()
 
 r.set('a', c)
 c = r.get('a')

@@ -322,7 +322,7 @@ class SetField(Field):
 		"""
 		Gets all members from set field
 		"""
-		return map(self._value_encoder.decode, self._redis.smembers(self._key))
+		return {self._value_encoder.decode(value) for value in self._redis.smembers(self._key)}
 
 	def count(self):
 		"""
@@ -345,6 +345,10 @@ class SetField(Field):
 
 		unique
 			if True, result list will contains unique values and limited by 'number'
+
+		return value
+			if number is None or 1, single value will be returned,
+			else, set, if 'unique' is True, or collection, if False, of values
 		"""
 		if number:
 			if number < 0:
@@ -352,16 +356,38 @@ class SetField(Field):
 
 			if not unique:
 				number *= -1
+				return map(self._value_encoder.decode, self._redis.srandmember(self._key, number))
+			else:
+				return {self._value_encoder.decode(value) for value in self._redis.srandmember(self._key, number)}
 
-			return map(self._value_encoder.decode, self._redis.srandmember(self._key, number))
 		else:
 			return self._value_encoder.decode(self._redis.srandmember(self._key))
 
-	def pop(self):
+	def pop(self, number=None):
 		"""
-		Returns random value and removes it from set field
+		Returns 'number' of random values and removes them from set field.
+		If number of elements in set field less then 'number', length result set will be limited by set field length
+
+		number
+			how many values must be popped (1 by default). Must be positive!
+
+		return value
+			if number is None or 1, single value will be returned, else set of values
 		"""
-		return self._value_encoder.decode(self._redis.spop(self._key))
+		if number:
+			if number < 0:
+				raise Exception('Number must be positive')
+
+			redis = self._redis.pipeline()
+
+			while number > 0:
+				redis.spop(self._key)
+				number -= 1
+
+			result = redis.execute()
+			return map(self._value_encoder.decode, filter(lambda value: value is not None, result))
+		else:
+			return self._value_encoder.decode(self._redis.spop(self._key))
 
 	def __len__(self):
 		return self.count()
