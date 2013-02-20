@@ -52,7 +52,6 @@ class SetFieldTestCase(FieldTestCaseBase):
 		result = self.field.random(4)
 		self.assertSetEqual(result, set(self.values[T:]).intersection(result))
 
-
 		result = tuple(self.field.random(20, unique=False))
 
 		self.assertEqual(len(result), 20)
@@ -69,6 +68,29 @@ class SetFieldTestCase(FieldTestCaseBase):
 
 		self.assertSetEqual(set(self.values_c[T:]).difference(temp_set), {self.v_con.encode(value) for value in result})
 
-
 		result = self.field.pop()
 		self.assertFalse(result in self.redis.smembers(self.keys[0]))
+
+	def test_union(self):
+		field1 = SetField(self.keys[1], redis=self.redis)
+
+		self.redis.sadd(self.keys[1], *self.values_c[:2])
+		self.redis.sadd(self.keys[2], *self.values_c[2:T + 3])
+
+		result = self.field.union(field1, self.keys[2])
+
+		self.assertSetEqual(result,
+			set(self.values[T:]).union(set(self.values[:2]), set(self.values[2:T + 3]))
+		)
+
+	def test_intersection(self):
+		field1 = SetField(self.keys[1], redis=self.redis)
+
+		self.redis.sadd(self.keys[1], *self.values_c[:T + 3])
+		self.redis.sadd(self.keys[2], *self.values_c[2:T + 1])
+
+		result = self.field.intersection(field1, self.keys[2])
+
+		self.assertSetEqual(result,
+			set(self.values[T:]).intersection(set(self.values[:T + 3]), set(self.values[2:T + 1]))
+		)

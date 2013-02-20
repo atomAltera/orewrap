@@ -27,6 +27,9 @@ class Field():
 		cls._Redis = redis
 		cls._Value_Encoder = value_encoder
 
+	def _keys_from_fields(self, fields):
+		return {field._key if isinstance(field, Field) else field for field in fields}
+
 	def __init__(self, key, value_encoder=None, redis=None):
 		"""
 		Initializing new instance of Field
@@ -35,7 +38,7 @@ class Field():
 			Redis DB key name
 
 		value_encoder
-			I/O 'value' serializer for current instance
+			I/O value serializer for current instance
 
 		redis
 			Redis client for this instance, if None, global client will be used (Defined in `Field.Init`)
@@ -157,7 +160,7 @@ class HashField(Field):
 	def __init__(self, key, value_encoder=None, name_encoder=None, redis=None, overwrite=True):
 		"""
 		name_encoder
-			I/O 'name' serializer for current instance
+			I/O name serializer for current instance
 
 		overwrite
 			whether overwrite values of existing name in key by default
@@ -315,6 +318,9 @@ class SetField(Field):
 	def delete(self, *values):
 		"""
 		Removes 'values' from set field
+
+		return value
+			the number of members removed from the set field, not including non existing members.
 		"""
 		return self._redis.srem(self._key, *map(self._value_encoder.encode, values))
 
@@ -322,7 +328,8 @@ class SetField(Field):
 		"""
 		Gets all members from set field
 		"""
-		return {self._value_encoder.decode(value) for value in self._redis.smembers(self._key)}
+		result = self._redis.smembers(self._key)
+		return {self._value_encoder.decode(value) for value in result}
 
 	def count(self):
 		"""
@@ -385,9 +392,43 @@ class SetField(Field):
 				number -= 1
 
 			result = redis.execute()
-			return map(self._value_encoder.decode, filter(lambda value: value is not None, result))
+			return {self._value_encoder.decode(value) for value in filter(lambda value: value is not None, result)}
 		else:
 			return self._value_encoder.decode(self._redis.spop(self._key))
+
+	def union(self, *set_fields):
+		"""
+		Returns union of values of current set field  and 'set_fields' fields and decoded with current value encoder
+
+		set_fields
+			collection of `SetField` instances or strings (key names). Note, if items is not instance of `Field`,
+			str(item) will be used to get key. If key holding the wrong kind of value, `redis.exceptions.ResponseError`
+			exception will be occurred
+
+		return value
+			unique values from current set field and set fields if 'set_fields'
+		"""
+		keys = self._keys_from_fields(set_fields)
+
+		values = self._redis.sunion(self._key, *keys)
+		return {self._value_encoder.decode(value) for value in values}
+
+	def intersection(self, *set_fields):
+		"""
+		Returns intersected of values of current set field and 'set_fields' fields and decoded with current value encoder
+
+		set_fields
+			collection of `SetField` instances or strings (key names). Note, if items is not instance of `Field`,
+			str(item) will be used to get key. If key holding the wrong kind of value, `redis.exceptions.ResponseError`
+			exception will be occurred
+
+		return value
+			intersection of values from current set field and set fields if 'set_fields'
+		"""
+		keys = self._keys_from_fields(set_fields)
+
+		values = self._redis.sinter(self._key, *keys)
+		return {self._value_encoder.decode(value) for value in values}
 
 	def __len__(self):
 		return self.count()
@@ -397,3 +438,203 @@ class SetField(Field):
 
 	def __contains__(self, value):
 		return self.contains(value)
+
+
+
+
+class SortedSetField(Field):
+	"""
+	Represents set fields in DB
+	http://redis.io/commands#sorted_set
+	"""
+	@classmethod
+	def Init(cls, redis, value_encoder = None, score_encoder = None):
+		"""
+		As like `Field.Init`, but also initializes default 'core_encoder' for all instances of SortedSetField
+		"""
+		super(SortedSetField, cls).Init(redis=redis, value_encoder=value_encoder)
+
+		cls._Score_Encoder = score_encoder
+
+
+	def __init__(self, key, value_encoder=None, score_encoder=None, redis=None):
+		"""
+		score_encoder
+			I/O score serializer for current instance
+		"""
+		super(SortedSetField, self).__init__(key, value_encoder=value_encoder, redis=redis)
+
+		self._score_encoder = score_encoder or self._Score_Encoder or string_encoder
+
+
+	def add(self, value, score):
+		"""
+		Adds value-score pair to sorted set field. If 'value' already exists in sorted set field, just score will be updated
+
+		return value
+			True, if 'value' was added to sorted set field, else False
+		"""
+		return bool(self.add_multi(**{value: score}))
+
+	def add_multi(self, **values):
+		"""
+		Adds value-score pairs to sorted set field. If 'value' already exists in sorted set field, just score will be updated
+
+		values
+			mapping values to scores
+
+		return value
+			the number of elements added to the sorted set field, not including elements already existing for which the score was updated.
+		"""
+		return self._redis.zadd(self._key,
+			**{self._value_encoder.encode(value): self._score_encoder.encode(score) for value, score in values.items()}
+		)
+
+	def delete(self, *values):
+		"""
+		Deletes elements from sorted set field
+
+		values
+			collection of values, to be deleted
+
+		return value
+			the number of members removed from the sorted set, not including non existing members.
+		"""
+		return self._redis.zrem(self._key, *map(self._value_encoder.encode, values))
+
+	def count(self, min_score=None, max_score=None):
+		"""
+		Returns the number of elements in the sorted set field with a score between 'min_score' and 'max_score'.
+		If both min_score and max_score are None, number of all elements will be returned
+
+		min_score
+			if None, "-inf" will used by default
+
+		max_score
+			if None, "+inf" will used by default
+		"""
+		if min_score is max_score is None:
+			return self._redis.zcard(self._key)
+
+		min_score = '-inf' if min_score is None else self._score_encoder.encode(min_score)
+		max_score = '+inf' if max_score is None else self._score_encoder.encode(max_score)
+
+		return self._redis.zcount(self._key, min_score, max_score)
+
+	def range_by_index(self, start_index=None, stop_index=None, desc=False, with_scores=False):
+		"""
+		Returns the specified range of elements in the sorted set field.
+
+		start_index
+			start index of range (0 by default)
+
+		stop_index
+			end index of range (-1 by default)
+
+		desc
+			whether elements must be ordered from highest to lowest score (from the lowest to the highest by default)
+
+		with_scores
+			if True, mapping value->score will be returned, else set of values
+		"""
+		if start_index is None: start_index = 0
+		if stop_index is None: stop_index = -1
+
+		result = self._redis.zrange(self._key, start_index, stop_index, desc, with_scores)
+
+		if with_scores:
+			return {self._value_encoder.decode(value): self._score_encoder.decode(score) for value, score in result.items()}
+		else:
+			return {self._value_encoder.decode(value) for value in result}
+
+
+	def range_by_score(self, min_score=None, max_score=None, with_scores=False):
+		"""
+		Returns the range of elements in the sorted set field with scores between 'min_score' and 'max_score' (both inclusive).
+
+		min_score
+			if None, "-inf" will used by default
+
+		max_score
+			if None, "+inf" will used by default
+
+		with_scores
+			if True, mapping value->score will be returned, else set of values
+		"""
+		min_score = '-inf' if min_score is None else self._score_encoder.encode(min_score)
+		max_score = '+inf' if max_score is None else self._score_encoder.encode(max_score)
+
+		result = self._redis.zrangebyscore(self._key, min_score, max_score, withscores=with_scores)
+
+		if with_scores:
+			return {self._value_encoder.decode(value): self._score_encoder.decode(score) for value, score in result.items()}
+		else:
+			return {self._value_encoder.decode(value) for value in result}
+
+	def index_of(self, value):
+		"""
+		Returns a 0-based value indicating the rank of 'value' in sorted set field
+
+		return value
+			None if sorted set field 'value' is not
+		"""
+		return self._redis.zrank(self._key, self._value_encoder.encode(value))
+
+	def score_of(self, value):
+		"""
+		Returns a score for value in the sorted set field
+		"""
+		return self._redis.zscore(self._key, self._value_encoder.encode(value))
+
+	def delete(self, *values):
+		"""
+		Removes 'values' from sorted set field
+
+		return value
+			the number of members removed from the sorted set field, not including non existing members.
+		"""
+		return self._redis.zrem(self._key, *map(self._value_encoder.encode, values))
+
+	def delete_range_by_index(self, start_index=None, stop_index=None):
+		"""
+		Removes all elements in the sorted set stored field at key with rank between 'start_index' and 'stop_index'
+
+		return value
+			the number of elements removed.
+		"""
+		if start_index is None: start_index = 0
+		if stop_index is None: stop_index = -1
+
+		return self._redis.zremrangebyrank(self._key, start_index, stop_index)
+
+	def delete_range_by_score(self, min_score=None, max_score=None):
+		"""
+		Removes all elements in the sorted set stored field at key with a score between 'min_score' and 'max_score' (inclusive).
+
+		return value
+			the number of elements removed.
+		"""
+		min_score = '-inf' if min_score is None else self._score_encoder.encode(min_score)
+		max_score = '+inf' if max_score is None else self._score_encoder.encode(max_score)
+
+		return self._redis.zremrangebyscore(self._key, min_score, max_score)
+
+	def __len__(self):
+		return self.count()
+
+	def __iter__(self):
+		return self.range_by_index(with_scores=True).items()
+
+	def __contains__(self, value):
+		return self.index_of(value) is not None
+
+#	def __getitem__(self, item):
+#		if isinstance(item, slice):
+#			return self.range_by_index(slice.start, slice.stop, slice.step)
+#		else:
+#			retrun self.
+
+
+
+
+
