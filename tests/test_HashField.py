@@ -10,9 +10,6 @@ class HashFieldTestCase(FieldTestCaseBase):
 
 		self.field = HashField(self.keys[0], redis=self.redis, value_encoder=self.v_con, name_encoder=self.n_con)
 
-	def d(self, seq1, seq2):
-		return dict(zip(seq1, seq2))
-
 	def test_set(self):
 		self.redis.hset(self.keys[0], self.names_c[1], self.values_c[1])
 
@@ -103,13 +100,13 @@ class HashFieldTestCase(FieldTestCaseBase):
 
 	def test_delete(self):
 		result = self.field.delete(self.names[2])
-		self.assertFalse(result)
+		self.assertEqual(result, 0)
 
 		temp_dict = self.d(self.names_c, self.values_c)
 		self.redis.hmset(self.keys[0], temp_dict)
 
 		result = self.field.delete(self.names[5])
-		self.assertTrue(result)
+		self.assertEqual(result, 1)
 
 		del temp_dict[self.names_c[5]]
 		self.assertDictEqual(self.redis.hgetall(self.keys[0]), temp_dict)

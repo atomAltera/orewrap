@@ -12,7 +12,7 @@ class Field():
 	_Value_Encoder = None
 
 	@classmethod
-	def Init(cls, redis, value_encoder = None):
+	def Init(cls, redis, value_encoder=None):
 		"""
 		Initialize global Field settings
 		Note that for each Field class different settings can be used!
@@ -80,14 +80,12 @@ class Field():
 		return not self.__eq__(other)
 
 
-
-
-
 class StringField(Field):
 	"""
 	Represents string fields in DB
 	http://redis.io/commands#string
 	"""
+
 	def __init__(self, key, value_encoder=None, redis=None, overwrite=True):
 		"""
 		overwrite
@@ -140,15 +138,15 @@ class StringField(Field):
 		return hash(self._key)
 
 
-
-
 class HashField(Field):
 	"""
 	Represents hash fields in DB
 	http://redis.io/commands#hash
 	"""
+	_Name_Encoder = None
+
 	@classmethod
-	def Init(cls, redis, value_encoder = None, name_encoder = None):
+	def Init(cls, redis, value_encoder=None, name_encoder=None):
 		"""
 		As like `Field.Init`, but also initializes default 'name_encoder' for all instances of HashField
 		"""
@@ -189,6 +187,19 @@ class HashField(Field):
 			self._value_encoder.encode(value)
 		)) or overwrite # because hset returns 0 if name-value pair with same name already exists ( http://redis.io/commands/hset )
 
+
+	def get(self, name, default=None):
+		"""
+		Gets value from name-value pair in field by 'name'.
+		If field or name does not exists, 'default' will be returned
+		"""
+		value = self._redis.hget(
+			self._key, self._name_encoder.encode(name)
+		)
+
+		return self._value_encoder.decode(value) if value is not None else default
+
+
 	def set_multi(self, dictionary):
 		"""
 		Writes multiple name-value pairs from 'dictionary' to DB hash field.
@@ -208,7 +219,7 @@ class HashField(Field):
 			values for not existed names will be replaces by 'default'
 
 		return value
-			list of values, associated with 'names' in the same order as requested in names
+			list of values, associated with 'names' in the same order as requested in 'names'
 		"""
 		values = self._redis.hmget(self._key,
 			(self._name_encoder.encode(name) for name in names)
@@ -216,17 +227,6 @@ class HashField(Field):
 
 		return tuple(self._value_encoder.decode(value) if value is not None else default for value in values)
 
-
-	def get(self, name, default=None):
-		"""
-		Gets value from name-value pair in field by 'name'.
-		If field or name does not exists, 'default' will be returned
-		"""
-		value = self._redis.hget(
-			self._key, self._name_encoder.encode(name)
-		)
-
-		return self._value_encoder.decode(value) if value is not None else default
 
 	def members(self):
 		"""
@@ -255,14 +255,17 @@ class HashField(Field):
 		"""
 		return map(self._value_encoder.decode, self._redis.hvals(self._key))
 
-	def delete(self, name):
+	def delete(self, *names):
 		"""
-		Deletes name-value pair form hash field by 'name'
+		Deletes name-value pairs form hash field by 'name'
+
+		names
+			names of name-value to be deleted
 
 		return value
-			True, if deleted, False if name-value pair with the same name not existed
+			Number of deleted members
 		"""
-		return bool(self._redis.hdel(self._key, self._name_encoder.encode(name)))
+		return self._redis.hdel(self._key, *(self._name_encoder.encode(name) for name in names))
 
 	def count(self):
 		"""
@@ -298,14 +301,12 @@ class HashField(Field):
 		return self.members().items()
 
 
-
-
-
 class SetField(Field):
 	"""
 	Represents set fields in DB
 	http://redis.io/commands#set
 	"""
+
 	def add(self, *values):
 		"""
 		Adds 'values' to set field
@@ -396,7 +397,7 @@ class SetField(Field):
 		else:
 			return self._value_encoder.decode(self._redis.spop(self._key))
 
-	def union(self, *set_fields):
+	def union(self, *setField_collection):
 		"""
 		Returns union of values of current set field  and 'set_fields' fields and decoded with current value encoder
 
@@ -408,12 +409,12 @@ class SetField(Field):
 		return value
 			unique values from current set field and set fields if 'set_fields'
 		"""
-		keys = self._keys_from_fields(set_fields)
+		keys = self._keys_from_fields(setField_collection)
 
 		values = self._redis.sunion(self._key, *keys)
 		return {self._value_encoder.decode(value) for value in values}
 
-	def intersection(self, *set_fields):
+	def intersection(self, *setField_collection):
 		"""
 		Returns intersected of values of current set field and 'set_fields' fields and decoded with current value encoder
 
@@ -425,7 +426,7 @@ class SetField(Field):
 		return value
 			intersection of values from current set field and set fields if 'set_fields'
 		"""
-		keys = self._keys_from_fields(set_fields)
+		keys = self._keys_from_fields(setField_collection)
 
 		values = self._redis.sinter(self._key, *keys)
 		return {self._value_encoder.decode(value) for value in values}
@@ -440,15 +441,16 @@ class SetField(Field):
 		return self.contains(value)
 
 
-
-
 class SortedSetField(Field):
 	"""
 	Represents set fields in DB
 	http://redis.io/commands#sorted_set
 	"""
+
+	_Score_Encoder = None
+
 	@classmethod
-	def Init(cls, redis, value_encoder = None, score_encoder = None):
+	def Init(cls, redis, value_encoder=None, score_encoder=None):
 		"""
 		As like `Field.Init`, but also initializes default 'core_encoder' for all instances of SortedSetField
 		"""
@@ -474,9 +476,9 @@ class SortedSetField(Field):
 		return value
 			True, if 'value' was added to sorted set field, else False
 		"""
-		return bool(self.add_multi(**{value: score}))
+		return bool(self.add_multi({value: score}))
 
-	def add_multi(self, **values):
+	def add_multi(self, dictionary):
 		"""
 		Adds value-score pairs to sorted set field. If 'value' already exists in sorted set field, just score will be updated
 
@@ -486,9 +488,11 @@ class SortedSetField(Field):
 		return value
 			the number of elements added to the sorted set field, not including elements already existing for which the score was updated.
 		"""
-		return self._redis.zadd(self._key,
-			**{self._value_encoder.encode(value): self._score_encoder.encode(score) for value, score in values.items()}
-		)
+		args = [None] * len(dictionary) * 2
+		args[::2] = map(self._value_encoder.encode, dictionary.keys())
+		args[1::2] = map(self._score_encoder.encode, dictionary.values())
+
+		return self._redis.zadd(self._key, *args)
 
 	def delete(self, *values):
 		"""
@@ -521,7 +525,7 @@ class SortedSetField(Field):
 
 		return self._redis.zcount(self._key, min_score, max_score)
 
-	def range_by_index(self, start_index=None, stop_index=None, desc=False, with_scores=False):
+	def range_by_index(self, start_index=None, stop_index=None, desc=False):
 		"""
 		Returns the specified range of elements in the sorted set field.
 
@@ -534,21 +538,16 @@ class SortedSetField(Field):
 		desc
 			whether elements must be ordered from highest to lowest score (from the lowest to the highest by default)
 
-		with_scores
-			if True, mapping value->score will be returned, else set of values
 		"""
 		if start_index is None: start_index = 0
 		if stop_index is None: stop_index = -1
 
-		result = self._redis.zrange(self._key, start_index, stop_index, desc, with_scores)
+		result = self._redis.zrange(self._key, start_index, stop_index, desc)
 
-		if with_scores:
-			return {self._value_encoder.decode(value): self._score_encoder.decode(score) for value, score in result.items()}
-		else:
-			return {self._value_encoder.decode(value) for value in result}
+		return tuple(self._value_encoder.decode(value) for value in result)
 
 
-	def range_by_score(self, min_score=None, max_score=None, with_scores=False):
+	def range_by_score(self, min_score=None, max_score=None):
 		"""
 		Returns the range of elements in the sorted set field with scores between 'min_score' and 'max_score' (both inclusive).
 
@@ -558,18 +557,19 @@ class SortedSetField(Field):
 		max_score
 			if None, "+inf" will used by default
 
-		with_scores
-			if True, mapping value->score will be returned, else set of values
 		"""
 		min_score = '-inf' if min_score is None else self._score_encoder.encode(min_score)
 		max_score = '+inf' if max_score is None else self._score_encoder.encode(max_score)
 
-		result = self._redis.zrangebyscore(self._key, min_score, max_score, withscores=with_scores)
+		result = self._redis.zrangebyscore(self._key, min_score, max_score)
 
-		if with_scores:
-			return {self._value_encoder.decode(value): self._score_encoder.decode(score) for value, score in result.items()}
-		else:
-			return {self._value_encoder.decode(value) for value in result}
+		return tuple(self._value_encoder.decode(value) for value in result)
+
+	def get_by_index(self, index):
+		result = self.range_by_index(index, index)
+		if not result: return None
+
+		return result[0]
 
 	def index_of(self, value):
 		"""
@@ -623,18 +623,66 @@ class SortedSetField(Field):
 		return self.count()
 
 	def __iter__(self):
-		return self.range_by_index(with_scores=True).items()
+		return self.range_by_index().__iter__()
 
 	def __contains__(self, value):
 		return self.index_of(value) is not None
 
-#	def __getitem__(self, item):
-#		if isinstance(item, slice):
-#			return self.range_by_index(slice.start, slice.stop, slice.step)
-#		else:
-#			retrun self.
+	def __getitem__(self, value):
+		return self.score_of(value)
+
+	def __setitem__(self, value, score):
+		return self.add(value, score)
+
+	def __delitem__(self, value):
+		return self.delete(value)
+
+
+
+class RefStringField(StringField):
+	def __init__(self, key, target_hashField, target_hashField_value, value_encoder=None, redis=None):
+		super(RefStringField, self).__init__(key, value_encoder=value_encoder, redis=redis, overwrite=True)
+
+		self._target_hashField = target_hashField
+		self._target_hashField_value = target_hashField_value
+
+	def set(self, name):
+		if not self._target_hashField.set(name, self._target_hashField_value):
+			return False
+
+		old_value = self.get()
+
+		super(RefStringField, self).set(name)
+
+		if old_value is not None:
+			self._target_hashField.delete(name)
+
+		return True
+
+	def destroy(self):
+		name = self.get()
+
+		if name is not None:
+			self._target_hashField.delete(name)
+
+		super(RefStringField, self).destroy()
 
 
 
 
+class ScoreStringField(StringField):
+	def __init__(self, key, target_sortedSetField, target_sortedSetField_value, value_encoder=None, redis=None):
+		super(ScoreStringField, self).__init__(key, value_encoder=value_encoder, redis=redis, overwrite=True)
 
+		self._target_sortedSetField = target_sortedSetField
+		self._target_sortedSetField_value = target_sortedSetField_value
+
+	def set(self, score):
+		self._target_sortedSetField.add(self._target_sortedSetField_value, score)
+		super(ScoreStringField, self).set(score)
+
+
+	def destroy(self):
+		self._target_sortedSetField.delete(self._target_sortedSetField_value)
+
+		super(ScoreStringField, self).destroy()

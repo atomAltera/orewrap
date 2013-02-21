@@ -5,7 +5,7 @@ from random import Random
 
 from redis import Redis
 
-from orewrap.encoders import EncodeQueue, string_encoder, base64_encoder, base32_encoder, base16_encoder
+from orewrap.encoders import Encoder, EncodeQueue, string_encoder, base64_encoder, base32_encoder, base16_encoder
 
 HOST = 'localhost'
 PORT = 6379
@@ -20,12 +20,12 @@ class FieldTestCaseBase(unittest.TestCase):
 		cls._random = Random()
 		cls.v_con = EncodeQueue(string_encoder, base64_encoder)
 		cls.n_con = EncodeQueue(string_encoder, base32_encoder)
-		cls.s_con = EncodeQueue(string_encoder, base16_encoder)
+		cls.s_con = Encoder(lambda value: value + 1000, lambda value: value - 1000)
 
-		cls.keys = cls.r(10)
-		cls.values = cls.r(10)
-		cls.names = cls.r(10)
-		cls.scores = cls.r(10, True)
+		cls.keys = cls.r(20)
+		cls.values = cls.r(20)
+		cls.names = cls.r(20)
+		cls.scores = cls.r(20, True)
 
 		cls.values_c = tuple(map(cls.v_con.encode, cls.values))
 		cls.names_c = tuple(map(cls.n_con.encode, cls.names))
@@ -34,6 +34,10 @@ class FieldTestCaseBase(unittest.TestCase):
 	@classmethod
 	def tearDownClass(cls):
 		cls.redis.flushdb()
+
+	@classmethod
+	def d(cls, seq1, seq2):
+		return dict(zip(seq1, seq2))
 
 	def setUp(self):
 		self.redis.flushdb()

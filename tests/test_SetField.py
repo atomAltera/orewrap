@@ -4,7 +4,7 @@ from tests.fieldTestCaseBase import FieldTestCaseBase
 
 from orewrap.fields import SetField
 
-T = 5
+T = 10
 
 class SetFieldTestCase(FieldTestCaseBase):
 	def setUp(self):
@@ -50,11 +50,11 @@ class SetFieldTestCase(FieldTestCaseBase):
 		self.assertTrue(result in set(self.values[T:]))
 
 		result = self.field.random(4)
-		self.assertSetEqual(result, set(self.values[T:]).intersection(result))
+		self.assertSetEqual(set(result), set(self.values[T:]).intersection(result))
 
-		result = tuple(self.field.random(20, unique=False))
+		result = tuple(self.field.random(30, unique=False))
 
-		self.assertEqual(len(result), 20)
+		self.assertEqual(len(result), 30)
 		self.assertSetEqual(set(result), set(self.values[T:]).intersection(result))
 
 
