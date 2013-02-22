@@ -580,6 +580,9 @@ class SortedSetField(Field):
 		"""
 		return self._redis.zrank(self._key, self._value_encoder.encode(value))
 
+	def contains(self, value):
+		return self.index_of(value) is not None
+
 	def score_of(self, value):
 		"""
 		Returns a score for value in the sorted set field
@@ -626,7 +629,7 @@ class SortedSetField(Field):
 		return self.range_by_index().__iter__()
 
 	def __contains__(self, value):
-		return self.index_of(value) is not None
+		return self.contains(value)
 
 	def __getitem__(self, value):
 		return self.score_of(value)
@@ -640,8 +643,8 @@ class SortedSetField(Field):
 
 
 class RefStringField(StringField):
-	def __init__(self, key, target_hashField, target_hashField_value, value_encoder=None, redis=None):
-		super(RefStringField, self).__init__(key, value_encoder=value_encoder, redis=redis, overwrite=True)
+	def __init__(self, key, target_hashField, target_hashField_value, name_encoder=None, redis=None):
+		super(RefStringField, self).__init__(key, value_encoder=name_encoder, redis=redis, overwrite=True)
 
 		self._target_hashField = target_hashField
 		self._target_hashField_value = target_hashField_value
@@ -671,8 +674,8 @@ class RefStringField(StringField):
 
 
 class ScoreStringField(StringField):
-	def __init__(self, key, target_sortedSetField, target_sortedSetField_value, value_encoder=None, redis=None):
-		super(ScoreStringField, self).__init__(key, value_encoder=value_encoder, redis=redis, overwrite=True)
+	def __init__(self, key, target_sortedSetField, target_sortedSetField_value, score_encoder=None, redis=None):
+		super(ScoreStringField, self).__init__(key, value_encoder=score_encoder, redis=redis, overwrite=True)
 
 		self._target_sortedSetField = target_sortedSetField
 		self._target_sortedSetField_value = target_sortedSetField_value
